@@ -1,1 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>LUT WebApp — тест</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Photo LUT — предпросмотр</h1>
+
+    <div class="uploader">
+      <label class="file-label">
+        <input id="fileInput" type="file" accept="image/*" />
+        <span>Выбрать фото</span>
+      </label>
+      <button id="processBtn" disabled>Уменьшить и показать превью</button>
+    </div>
+
+    <div id="status" class="status">Загрузите изображение</div>
+
+    <div class="preview-area">
+      <canvas id="previewCanvas"></canvas>
+    </div>
+
+    <div class="hint">
+      Это первая версия. Дальше: применим LUT, соберём коллаж и вернём результат в чат.
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
 
