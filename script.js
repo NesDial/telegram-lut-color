@@ -1,72 +1,126 @@
-// script.js — минимальная логика: загрузка -> ресайз -> отрисовка на canvas
-const fileInput = document.getElementById('fileInput');
-const processBtn = document.getElementById('processBtn');
-const status = document.getElementById('status');
-const canvas = document.getElementById('previewCanvas');
-const ctx = canvas.getContext('2d');
+const LUTS = [
+  {name: "Аниме", path: "luts/lut1.png"},
+  {name: "Черный", path: "luts/lut2.png"},
+  {name: "Мягкие тени", path: "luts/lut3.png"},
+  {name: "Яркий", path: "luts/lut4.png"},
+  {name: "Авто", path: "luts/lut5.png"},
+];
 
-let originalImage = null; // Image object (полезно для позже)
-let originalUint8 = null;  // raw pixel data (если понадобится)
+const MAX_PREVIEW = 200; // px по длинной стороне
 
-fileInput.addEventListener('change', (e) => {
-  processBtn.disabled = !e.target.files || e.target.files.length === 0;
-  status.textContent = e.target.files && e.target.files.length ? `${e.target.files.length} файл(ов) готов(ы)` : 'Загрузите изображение';
-});
+const photoInput = document.getElementById("photoInput");
+const previewContainer = document.getElementById("previewContainer");
+const finalContainer = document.getElementById("finalContainer");
+const statusDiv = document.getElementById("status");
 
-processBtn.addEventListener('click', async () => {
-  const file = fileInput.files[0];
-  if (!file) return;
-  status.textContent = 'Загружаю и обрабатываю...';
-  processBtn.disabled = true;
+let originalImage = null; // для финального применения LUT
 
-  try {
-    const dataURL = await readFileAsDataURL(file);
-    const img = await createImage(dataURL);
-
-    // resize: по длинной стороне 200 px
-    const maxSide = 200;
-    let { width:w, height:h } = img;
-    const scale = maxSide / Math.max(w, h);
-    const newW = Math.max(1, Math.round(w * scale));
-    const newH = Math.max(1, Math.round(h * scale));
-
-    canvas.width = newW;
-    canvas.height = newH;
-    ctx.clearRect(0,0,newW,newH);
-    ctx.drawImage(img, 0, 0, newW, newH);
-
-    // сохраняем оригинал для дальнейших шагов
+photoInput.addEventListener("change", async (e) => {
+    if (!e.target.files[0]) return;
+    statusDiv.textContent = "📸 Фото в работе, секундочку...";
+    previewContainer.innerHTML = "";
+    finalContainer.innerHTML = "";
+    
+    const file = e.target.files[0];
+    const img = await loadImage(file);
     originalImage = img;
 
-    // сохраняем пиксели (Uint8Array) если потребуется
-    const imageData = ctx.getImageData(0,0,newW,newH);
-    originalUint8 = imageData.data; // потом пригодится для LUT
-
-    status.textContent = `Готово — превью ${newW}×${newH} (по длинной стороне ${maxSide}px)`;
-  } catch(err){
-    console.error(err);
-    status.textContent = 'Ошибка при обработке файла';
-  } finally {
-    processBtn.disabled = false;
-  }
+    const preview = resizeImage(img, MAX_PREVIEW);
+    generateLUTPreviews(preview);
 });
 
-// утилиты
-function readFileAsDataURL(file){
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result);
-    r.onerror = () => rej(new Error('Ошибка чтения файла'));
-    r.readAsDataURL(file);
-  });
+function loadImage(file) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = URL.createObjectURL(file);
+    });
 }
 
-function createImage(dataURL){
-  return new Promise((res, rej) => {
-    const img = new Image();
-    img.onload = () => res(img);
-    img.onerror = (e) => rej(new Error('Не удалось загрузить изображение'));
-    img.src = dataURL;
-  });
+function resizeImage(img, maxSide) {
+    const canvas = document.createElement("canvas");
+    let scale = maxSide / Math.max(img.width, img.height);
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas;
 }
 
+function generateLUTPreviews(previewCanvas) {
+    statusDiv.textContent = "🎨 Создаем коллаж с LUT...";
+    LUTS.forEach(async (lut) => {
+        const processed = await applyLUT(previewCanvas, lut.path);
+        const container = document.createElement("div");
+        container.style.display = "inline-block";
+        container.appendChild(processed);
+        
+        const label = document.createElement("span");
+        label.textContent = lut.name;
+        label.className = "lut-label";
+        container.appendChild(label);
+
+        processed.style.cursor = "pointer";
+        processed.onclick = () => applyFinalLUT(lut.path, lut.name);
+
+        previewContainer.appendChild(container);
+    });
+    statusDiv.textContent = "✅ Коллаж готов, выберите LUT.";
+}
+
+// Простое наложение LUT
+async function applyLUT(canvas, lutPath) {
+    const lutImg = await loadImageFile(lutPath);
+    const lutCanvas = document.createElement("canvas");
+    lutCanvas.width = canvas.width;
+    lutCanvas.height = canvas.height;
+    const ctx = lutCanvas.getContext("2d");
+
+    // Простейшее смешивание: 50% исходное + 50% LUT (для превью)
+    ctx.drawImage(canvas, 0, 0);
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(lutImg, 0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1.0;
+
+    return lutCanvas;
+}
+
+function loadImageFile(path) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = path;
+    });
+}
+
+// Финальное применение LUT на исходное фото
+async function applyFinalLUT(lutPath, lutName) {
+    statusDiv.textContent = "⏳ Применяем выбранный LUT к исходному фото...";
+    const canvas = document.createElement("canvas");
+    canvas.width = originalImage.width;
+    canvas.height = originalImage.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(originalImage, 0, 0);
+
+    const lutImg = await loadImageFile(lutPath);
+    ctx.globalAlpha = 0.5; // плавное наложение LUT
+    ctx.drawImage(lutImg, 0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1.0;
+
+    finalContainer.innerHTML = "";
+    const label = document.createElement("div");
+    label.textContent = `✅ Применен LUT: ${lutName}`;
+    finalContainer.appendChild(label);
+    finalContainer.appendChild(canvas);
+
+    // Автоматическая загрузка результата
+    const link = document.createElement("a");
+    link.download = `processed_${lutName}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.textContent = "⬇ Скачать результат";
+    link.style.display = "block";
+    link.style.marginTop = "10px";
+    finalContainer.appendChild(link);
+
+    statusDiv.textContent = "🎉 LUT применен!";
+}
