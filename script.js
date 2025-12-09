@@ -1,103 +1,158 @@
-const photoInput = document.getElementById('photoInput');
-const previewContainer = document.getElementById('previewContainer');
-const lutSlider = document.getElementById('lutSlider');
-const sharpSlider = document.getElementById('sharpSlider');
-const applyBtn = document.getElementById('applyBtn');
-const modal = document.getElementById('modal');
-const saveBtn = document.getElementById('saveBtn');
-const cancelBtn = document.getElementById('cancelBtn');
+// script.js
 
-// Загрузка LUT
-const LUTS = [
-    { name: 'gold200', file: 'luts/gold200.CUBE' },
-    { name: 'moody film', file: 'luts/moody_film.CUBE' },
-    { name: 'film fade', file: 'luts/film_fade.CUBE' }
-];
+const fileInput = document.getElementById("upload");
+const carouselContainer = document.getElementById("carousel");
+const intensitySlider = document.getElementById("lutIntensity");
+const sharpnessSlider = document.getElementById("sharpnessIntensity");
+const applyButton = document.getElementById("applyLUT");
+const downloadButton = document.getElementById("downloadResult");
 
 let originalImage = null;
-let previewImages = [];
-let selectedIndex = 0;
+let previewCanvas = document.createElement("canvas");
+let previewCtx = previewCanvas.getContext("2d");
 
-photoInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+let processedImage = null; // итог для скачивания
 
-    const reader = new FileReader();
-    reader.onload = () => {
-        const img = new Image();
-        img.onload = () => {
-            originalImage = img;
-            generatePreviews(img);
-        };
-        img.src = reader.result;
+// Превью-версии LUT
+let previewLUTs = [
+  { name: "Gold 200", file: "luts/gold_200.CUBE" },
+  { name: "Moody Film", file: "luts/moody_film.CUBE" },
+  { name: "Film Fade", file: "luts/film_fade.CUBE" }
+];
+
+let currentIndex = 0;
+
+fileInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    const img = new Image();
+    img.onload = () => {
+      originalImage = img;
+      createPreviews();
+      showCurrentPreview();
     };
-    reader.readAsDataURL(file);
+    img.src = evt.target.result;
+  };
+  reader.readAsDataURL(file);
 });
 
-function generatePreviews(img) {
-    previewContainer.innerHTML = '';
-    previewImages = [];
+// Создание уменьшенных превью с LUT
+function createPreviews() {
+  carouselContainer.innerHTML = "";
+  previewLUTs.forEach((lut, idx) => {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const scale = 200 / Math.max(originalImage.width, originalImage.height);
+    canvas.width = originalImage.width * scale;
+    canvas.height = originalImage.height * scale;
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const scale = 200 / Math.max(img.width, img.height);
-    canvas.width = img.width * scale;
-    canvas.height = img.height * scale;
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-    LUTS.forEach((lut, index) => {
-        const previewCanvas = document.createElement('canvas');
-        previewCanvas.width = canvas.width;
-        previewCanvas.height = canvas.height;
-        const previewCtx = previewCanvas.getContext('2d');
-        previewCtx.drawImage(canvas, 0, 0);
-
-        // ЗДЕСЬ placeholder: применяем LUT к previewCanvas
-        // Для настоящего проекта нужно подключить библиотеку обработки .CUBE
-        previewCtx.globalAlpha = lutSlider.value / 100; // сила LUT для превью
-        previewCtx.fillStyle = 'rgba(255,255,255,0)'; // placeholder
-        previewCtx.fillRect(0,0,previewCanvas.width, previewCanvas.height);
-
-        previewCanvas.dataset.index = index;
-        previewCanvas.addEventListener('click', () => {
-            selectedIndex = index;
-        });
-
-        previewContainer.appendChild(previewCanvas);
-        previewImages.push(previewCanvas);
-    });
-}
-
-applyBtn.addEventListener('click', () => {
-    if (!originalImage) return;
-
-    modal.classList.remove('hidden');
-
-    saveBtn.onclick = () => {
-        applyLUTAndDownload();
-        modal.classList.add('hidden');
-    };
-
-    cancelBtn.onclick = () => {
-        modal.classList.add('hidden');
-    };
-});
-
-function applyLUTAndDownload() {
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.min(originalImage.width, 4096);
-    canvas.height = Math.min(originalImage.height, 4096 * originalImage.height/originalImage.width);
-    const ctx = canvas.getContext('2d');
     ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
 
-    // placeholder: применяем выбранный LUT
-    // placeholder: применяем резкость
-    ctx.globalAlpha = lutSlider.value / 100;
+    // Накладываем LUT (только как превью, быстрое наложение)
+    applyLUTCanvas(ctx, canvas.width, canvas.height, lut.file, intensitySlider.value);
 
-    canvas.toBlob((blob) => {
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `processed_${LUTS[selectedIndex].name}.jpg`;
-        link.click();
-    }, 'image/jpeg', 1.0);
+    canvas.classList.add("carousel-item");
+    if (idx !== currentIndex) canvas.style.display = "none";
+    carouselContainer.appendChild(canvas);
+  });
+}
+
+// Показ текущего превью
+function showCurrentPreview() {
+  const items = document.querySelectorAll(".carousel-item");
+  items.forEach((c, i) => (c.style.display = i === currentIndex ? "block" : "none"));
+}
+
+// Перелистывание карусели
+document.getElementById("prev").addEventListener("click", () => {
+  currentIndex = (currentIndex - 1 + previewLUTs.length) % previewLUTs.length;
+  showCurrentPreview();
+});
+
+document.getElementById("next").addEventListener("click", () => {
+  currentIndex = (currentIndex + 1) % previewLUTs.length;
+  showCurrentPreview();
+});
+
+// Обновление превью при изменении ползунков
+[intensitySlider, sharpnessSlider].forEach(slider => {
+  slider.addEventListener("input", () => {
+    createPreviews();
+    showCurrentPreview();
+  });
+});
+
+// Применение LUT и резкости на исходное изображение
+applyButton.addEventListener("click", () => {
+  if (!originalImage) return;
+  const canvas = document.createElement("canvas");
+  canvas.width = originalImage.width;
+  canvas.height = originalImage.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(originalImage, 0, 0);
+
+  const lutFile = previewLUTs[currentIndex].file;
+  applyLUTCanvas(ctx, canvas.width, canvas.height, lutFile, intensitySlider.value);
+  applySharpnessCanvas(ctx, canvas.width, canvas.height, sharpnessSlider.value);
+
+  processedImage = canvas;
+  alert("✅ LUT и резкость применены. Теперь можно скачать!");
+});
+
+// Скачивание результата
+downloadButton.addEventListener("click", () => {
+  if (!processedImage) return alert("Сначала примените LUT!");
+  const link = document.createElement("a");
+  link.href = processedImage.toDataURL("image/jpeg", 1.0);
+  link.download = "processed.jpg";
+  link.click();
+});
+
+// --- Функции обработки ---
+function applyLUTCanvas(ctx, width, height, lutFile, intensity = 1.0) {
+  // Здесь должна быть функция чтения .CUBE и применения на Canvas
+  // Пока для демонстрации – простое цветовое наложение
+  const imgData = ctx.getImageData(0, 0, width, height);
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    imgData.data[i] = imgData.data[i] * intensity;     // R
+    imgData.data[i + 1] = imgData.data[i + 1] * intensity; // G
+    imgData.data[i + 2] = imgData.data[i + 2] * intensity; // B
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function applySharpnessCanvas(ctx, width, height, intensity = 1.0) {
+  // Простая резкость через kernel
+  const imgData = ctx.getImageData(0, 0, width, height);
+  const data = imgData.data;
+  const w = width;
+  const h = height;
+  const copy = new Uint8ClampedArray(data);
+
+  const kernel = [
+    [0, -0.25 * intensity, 0],
+    [-0.25 * intensity, 1 + intensity, -0.25 * intensity],
+    [0, -0.25 * intensity, 0]
+  ];
+
+  function getIndex(x, y, c) {
+    return 4 * (y * w + x) + c;
+  }
+
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      for (let c = 0; c < 3; c++) {
+        let val = 0;
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            val += copy[getIndex(x + kx, y + ky, c)] * kernel[ky + 1][kx + 1];
+          }
+        }
+        data[getIndex(x, y, c)] = Math.min(255, Math.max(0, val));
+      }
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
 }
