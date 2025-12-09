@@ -1,16 +1,27 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<title>MiniApp LUT Preview</title>
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <title>Photo LUT Editor</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>Выберите фото для обработки</h1>
-<input type="file" id="photoInput" accept="image/*">
-<div id="status"></div>
-<div id="previewContainer"></div>
-<div id="finalContainer"></div>
+<h2>Фотокоррекция</h2>
+
+<input type="file" id="upload" accept="image/*">
+
+<div id="preview-container">
+    <canvas id="previewCanvas"></canvas>
+</div>
+
+<label>Сила LUT: <span id="strengthVal">100%</span></label>
+<input type="range" id="lutStrength" min="0" max="100" value="100">
+
+<label>Резкость: <span id="sharpVal">0%</span></label>
+<input type="range" id="sharpness" min="0" max="100" value="0">
+
+<button id="downloadFull">Скачать фото (оригинал, высокое качество)</button>
+
 <script src="script.js"></script>
 </body>
 </html>
