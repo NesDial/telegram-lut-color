@@ -1,26 +1,33 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Photo LUT Editor</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiniApp LUT Color</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h2>Фотокоррекция</h2>
-
-<input type="file" id="upload" accept="image/*">
-
-<div id="preview-container">
-    <canvas id="previewCanvas"></canvas>
+<div class="container">
+    <input type="file" id="photoInput" accept="image/*">
+    
+    <div id="previewContainer" class="carousel"></div>
+    
+    <label for="lutSlider">Сила LUT:</label>
+    <input type="range" id="lutSlider" min="0" max="100" value="100">
+    
+    <label for="sharpSlider">Резкость:</label>
+    <input type="range" id="sharpSlider" min="0" max="100" value="50">
+    
+    <button id="applyBtn">Применить</button>
 </div>
 
-<label>Сила LUT: <span id="strengthVal">100%</span></label>
-<input type="range" id="lutStrength" min="0" max="100" value="100">
-
-<label>Резкость: <span id="sharpVal">0%</span></label>
-<input type="range" id="sharpness" min="0" max="100" value="0">
-
-<button id="downloadFull">Скачать фото (оригинал, высокое качество)</button>
+<div id="modal" class="modal hidden">
+    <div class="modal-content">
+        <p>Сохранить обработанное фото?</p>
+        <button id="saveBtn">Сохранить</button>
+        <button id="cancelBtn">Отменить</button>
+    </div>
+</div>
 
 <script src="script.js"></script>
 </body>
