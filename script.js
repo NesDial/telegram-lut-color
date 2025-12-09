@@ -1,151 +1,150 @@
-const LUTS = [
-  {name: "Аниме", path: "luts/lut1.png"},
-  {name: "Черный", path: "luts/lut2.png"},
-  {name: "Мягкие тени", path: "luts/lut3.png"},
-  {name: "Яркий", path: "luts/lut4.png"},
-  {name: "Авто", path: "luts/lut5.png"},
+const lutFiles = [
+    { name: "Gold 200", file: "luts/gold200.cube" },
+    { name: "Moody Film", file: "luts/moody_film.cube" },
+    { name: "Film Fade", file: "luts/film_fade.cube" }
 ];
 
-const MAX_PREVIEW = 200; // px по длинной стороне
+let luts = {};
+let originalImage;
+let previewImage;
 
-const photoInput = document.getElementById("photoInput");
-const previewContainer = document.getElementById("previewContainer");
-const finalContainer = document.getElementById("finalContainer");
-const statusDiv = document.getElementById("status");
+const upload = document.getElementById("upload");
+const previewCanvas = document.getElementById("previewCanvas");
+const ctx = previewCanvas.getContext("2d");
 
-let originalImage = null; // для финального применения LUT
+async function loadLUT(file) {
+    const text = await fetch(file).then(r => r.text());
+    const lines = text.split("\n").filter(l => !l.startsWith("#"));
+    const table = [];
 
-photoInput.addEventListener("change", async (e) => {
-    if (!e.target.files[0]) return;
-    statusDiv.textContent = "📸 Фото в работе, секундочку...";
-    previewContainer.innerHTML = "";
-    finalContainer.innerHTML = "";
-    
-    const file = e.target.files[0];
-    const img = await loadImage(file);
-    originalImage = img;
-
-    const preview = resizeImage(img, MAX_PREVIEW);
-    await generateLUTPreviews(preview);
-});
-
-function loadImage(file) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.src = URL.createObjectURL(file);
-    });
+    for (let line of lines) {
+        const p = line.trim().split(" ");
+        if (p.length === 3) table.push([+p[0]*255, +p[1]*255, +p[2]*255]);
+    }
+    return table;
 }
 
-function resizeImage(img, maxSide) {
+async function initLUTs() {
+    for (let lut of lutFiles) {
+        luts[lut.name] = await loadLUT(lut.file);
+    }
+}
+initLUTs();
+
+upload.addEventListener("change", handleFile);
+
+async function handleFile(e) {
+    const file = e.target.files[0];
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+
+    img.onload = () => {
+        originalImage = img;
+        createPreview(img);
+    };
+}
+
+function resizeImage(img, maxSide = 4096) {
+    const ratio = img.width / img.height;
+    let w = img.width;
+    let h = img.height;
+
+    if (Math.max(w, h) > maxSide) {
+        if (w > h) { w = maxSide; h = maxSide / ratio; }
+        else { h = maxSide; w = maxSide * ratio; }
+    }
+
     const canvas = document.createElement("canvas");
-    let scale = maxSide / Math.max(img.width, img.height);
-    canvas.width = img.width * scale;
-    canvas.height = img.height * scale;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
     return canvas;
 }
 
-// Генерация коллажа LUT-превью
-async function generateLUTPreviews(previewCanvas) {
-    statusDiv.textContent = "🎨 Создаем коллаж с LUT...";
-    for (let lut of LUTS) {
-        const processed = await applyLUT(previewCanvas, lut.path, true); // точное наложение LUT
-        const container = document.createElement("div");
-        container.style.display = "inline-block";
-        container.appendChild(processed);
+function createPreview(img) {
+    previewImage = resizeImage(img, 900);
+    previewCanvas.width = previewImage.width;
+    previewCanvas.height = previewImage.height;
+    renderPreview();
+}
 
-        const label = document.createElement("span");
-        label.textContent = lut.name;
-        label.className = "lut-label";
-        container.appendChild(label);
+function mix(a, b, t) { return a + (b - a) * t; }
 
-        processed.style.cursor = "pointer";
-        processed.onclick = () => applyFinalLUT(lut.path, lut.name);
+function applySharpen(data, width, height, amount) {
+    if (amount <= 0) return data;
+    const copy = new Uint8ClampedArray(data);
+    const strength = amount / 100 * 1.2;
 
-        previewContainer.appendChild(container);
+    for (let i = 4; i < data.length - 4; i += 4) {
+        data[i] = mix(copy[i], copy[i] + (copy[i] - copy[i - 4]), strength);
+        data[i+1] = mix(copy[i+1], copy[i+1] + (copy[i+1] - copy[i+1 - 4]), strength);
+        data[i+2] = mix(copy[i+2], copy[i+2] + (copy[i+2] - copy[i+2 - 4]), strength);
     }
-    statusDiv.textContent = "✅ Коллаж готов, выберите LUT.";
+    return data;
 }
 
-// Загружаем изображение LUT
-function loadImageFile(path) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "Anonymous"; // чтобы можно было получить данные пикселей
-        img.onload = () => resolve(img);
-        img.src = path;
-    });
-}
+function renderPreview() {
+    if (!previewImage) return;
 
-// Применяем LUT к Canvas
-async function applyLUT(sourceCanvas, lutPath, isPreview=false) {
-    const lutImg = await loadImageFile(lutPath);
+    const activeLUT = Object.keys(luts)[0]; // пока берем первый — позже сделаю свайп
+    const lut = luts[activeLUT];
 
-    const canvas = document.createElement("canvas");
-    canvas.width = sourceCanvas.width;
-    canvas.height = sourceCanvas.height;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(sourceCanvas, 0, 0);
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(previewImage, 0, 0);
+    const imgData = ctx.getImageData(0, 0, previewCanvas.width, previewCanvas.height);
     const data = imgData.data;
 
-    // Простейшее LUT-отображение: берем LUT как 1:1 текстуру, нормализуем
-    const lutCanvas = document.createElement("canvas");
-    lutCanvas.width = lutImg.width;
-    lutCanvas.height = lutImg.height;
-    const lutCtx = lutCanvas.getContext("2d");
-    lutCtx.drawImage(lutImg, 0, 0);
-    const lutData = lutCtx.getImageData(0, 0, lutCanvas.width, lutCanvas.height).data;
+    const strength = document.getElementById("lutStrength").value / 100;
 
     for (let i = 0; i < data.length; i += 4) {
-        // получаем r,g,b пиксель, нормируем к LUT
-        let r = data[i] / 255;
-        let g = data[i+1] / 255;
-        let b = data[i+2] / 255;
+        const r = data[i], g = data[i+1], b = data[i+2];
+        const idx = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+        const lutPix = lut[idx];
 
-        // координаты LUT (предположим, LUT квадрат, размер 512x512)
-        const lutSize = lutImg.width; // ширина LUT
-        let x = Math.floor(r * (lutSize - 1));
-        let y = Math.floor(g * (lutSize - 1));
-        let idx = ((y * lutSize + x) * 4) | 0;
-
-        data[i]   = lutData[idx];     // R
-        data[i+1] = lutData[idx+1];   // G
-        data[i+2] = lutData[idx+2];   // B
-        // Alpha оставляем без изменений
+        data[i]   = mix(r, lutPix[0], strength);
+        data[i+1] = mix(g, lutPix[1], strength);
+        data[i+2] = mix(b, lutPix[2], strength);
     }
 
+    const sharp = document.getElementById("sharpness").value;
+    applySharpen(data, previewCanvas.width, previewCanvas.height, sharp);
+
     ctx.putImageData(imgData, 0, 0);
-    return canvas;
 }
 
-// Финальное применение LUT на исходное фото
-async function applyFinalLUT(lutPath, lutName) {
-    statusDiv.textContent = "⏳ Применяем выбранный LUT к исходному фото...";
-    const canvas = document.createElement("canvas");
-    canvas.width = originalImage.width;
-    canvas.height = originalImage.height;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(originalImage, 0, 0);
+document.getElementById("lutStrength").addEventListener("input", renderPreview);
+document.getElementById("sharpness").addEventListener("input", () => {
+    document.getElementById("sharpVal").innerText = document.getElementById("sharpness").value + "%";
+    renderPreview();
+});
 
-    const processed = await applyLUT(canvas, lutPath, false);
+document.getElementById("downloadFull").addEventListener("click", async () => {
+    const fullCanvas = resizeImage(originalImage, 4096);
+    const c = fullCanvas.getContext("2d");
 
-    finalContainer.innerHTML = "";
-    const label = document.createElement("div");
-    label.textContent = `✅ Применен LUT: ${lutName}`;
-    finalContainer.appendChild(label);
-    finalContainer.appendChild(processed);
+    c.drawImage(originalImage, 0, 0, fullCanvas.width, fullCanvas.height);
+    const imgData = c.getImageData(0, 0, fullCanvas.width, fullCanvas.height);
+    const data = imgData.data;
 
-    // Автозагрузка результата
+    const lut = luts[Object.keys(luts)[0]];
+    const strength = document.getElementById("lutStrength").value / 100;
+
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i+1], b = data[i+2];
+        const idx = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+        const lutPix = lut[idx];
+
+        data[i]   = mix(r, lutPix[0], strength);
+        data[i+1] = mix(g, lutPix[1], strength);
+        data[i+2] = mix(b, lutPix[2], strength);
+    }
+
+    const sharp = document.getElementById("sharpness").value;
+    applySharpen(data, fullCanvas.width, fullCanvas.height, sharp);
+
+    c.putImageData(imgData, 0, 0);
+
     const link = document.createElement("a");
-    link.download = `processed_${lutName}.png`;
-    link.href = processed.toDataURL("image/png");
-    link.textContent = "⬇ Скачать результат";
-    link.style.display = "block";
-    link.style.marginTop = "10px";
-    finalContainer.appendChild(link);
-
-    statusDiv.textContent = "🎉 LUT применен!";
-}
+    link.download = "edited.jpg"; 
+    link.href = fullCanvas.toDataURL("image/jpeg", 1.0);
+    link.click();
+});
