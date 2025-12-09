@@ -1,34 +1,37 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MiniApp LUT Color</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MiniApp LUT Preview</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="container">
-    <input type="file" id="photoInput" accept="image/*">
+  <div class="container">
+    <h1>MiniApp LUT Preview</h1>
     
-    <div id="previewContainer" class="carousel"></div>
+    <input type="file" id="upload" accept="image/*">
     
-    <label for="lutSlider">Сила LUT:</label>
-    <input type="range" id="lutSlider" min="0" max="100" value="100">
-    
-    <label for="sharpSlider">Резкость:</label>
-    <input type="range" id="sharpSlider" min="0" max="100" value="50">
-    
-    <button id="applyBtn">Применить</button>
-</div>
-
-<div id="modal" class="modal hidden">
-    <div class="modal-content">
-        <p>Сохранить обработанное фото?</p>
-        <button id="saveBtn">Сохранить</button>
-        <button id="cancelBtn">Отменить</button>
+    <div class="carousel-wrapper">
+      <button id="prev" class="carousel-btn">&larr;</button>
+      <div id="carousel" class="carousel"></div>
+      <button id="next" class="carousel-btn">&rarr;</button>
     </div>
-</div>
+    
+    <div class="sliders">
+      <label for="lutIntensity">Интенсивность LUT: <span id="lutVal">1.0</span></label>
+      <input type="range" id="lutIntensity" min="0" max="2" step="0.01" value="1">
 
-<script src="script.js"></script>
+      <label for="sharpnessIntensity">Резкость: <span id="sharpVal">1.0</span></label>
+      <input type="range" id="sharpnessIntensity" min="0" max="5" step="0.1" value="1">
+    </div>
+
+    <div class="buttons">
+      <button id="applyLUT">Применить LUT</button>
+      <button id="downloadResult">Скачать</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
 </body>
 </html>
