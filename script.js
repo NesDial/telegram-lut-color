@@ -1,150 +1,103 @@
-const lutFiles = [
-    { name: "Gold 200", file: "luts/gold200.cube" },
-    { name: "Moody Film", file: "luts/moody_film.cube" },
-    { name: "Film Fade", file: "luts/film_fade.cube" }
+const photoInput = document.getElementById('photoInput');
+const previewContainer = document.getElementById('previewContainer');
+const lutSlider = document.getElementById('lutSlider');
+const sharpSlider = document.getElementById('sharpSlider');
+const applyBtn = document.getElementById('applyBtn');
+const modal = document.getElementById('modal');
+const saveBtn = document.getElementById('saveBtn');
+const cancelBtn = document.getElementById('cancelBtn');
+
+// Загрузка LUT
+const LUTS = [
+    { name: 'gold200', file: 'luts/gold200.CUBE' },
+    { name: 'moody film', file: 'luts/moody_film.CUBE' },
+    { name: 'film fade', file: 'luts/film_fade.CUBE' }
 ];
 
-let luts = {};
-let originalImage;
-let previewImage;
+let originalImage = null;
+let previewImages = [];
+let selectedIndex = 0;
 
-const upload = document.getElementById("upload");
-const previewCanvas = document.getElementById("previewCanvas");
-const ctx = previewCanvas.getContext("2d");
-
-async function loadLUT(file) {
-    const text = await fetch(file).then(r => r.text());
-    const lines = text.split("\n").filter(l => !l.startsWith("#"));
-    const table = [];
-
-    for (let line of lines) {
-        const p = line.trim().split(" ");
-        if (p.length === 3) table.push([+p[0]*255, +p[1]*255, +p[2]*255]);
-    }
-    return table;
-}
-
-async function initLUTs() {
-    for (let lut of lutFiles) {
-        luts[lut.name] = await loadLUT(lut.file);
-    }
-}
-initLUTs();
-
-upload.addEventListener("change", handleFile);
-
-async function handleFile(e) {
+photoInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
-    const img = new Image();
-    img.src = URL.createObjectURL(file);
+    if (!file) return;
 
-    img.onload = () => {
-        originalImage = img;
-        createPreview(img);
+    const reader = new FileReader();
+    reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+            originalImage = img;
+            generatePreviews(img);
+        };
+        img.src = reader.result;
     };
-}
-
-function resizeImage(img, maxSide = 4096) {
-    const ratio = img.width / img.height;
-    let w = img.width;
-    let h = img.height;
-
-    if (Math.max(w, h) > maxSide) {
-        if (w > h) { w = maxSide; h = maxSide / ratio; }
-        else { h = maxSide; w = maxSide * ratio; }
-    }
-
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-    return canvas;
-}
-
-function createPreview(img) {
-    previewImage = resizeImage(img, 900);
-    previewCanvas.width = previewImage.width;
-    previewCanvas.height = previewImage.height;
-    renderPreview();
-}
-
-function mix(a, b, t) { return a + (b - a) * t; }
-
-function applySharpen(data, width, height, amount) {
-    if (amount <= 0) return data;
-    const copy = new Uint8ClampedArray(data);
-    const strength = amount / 100 * 1.2;
-
-    for (let i = 4; i < data.length - 4; i += 4) {
-        data[i] = mix(copy[i], copy[i] + (copy[i] - copy[i - 4]), strength);
-        data[i+1] = mix(copy[i+1], copy[i+1] + (copy[i+1] - copy[i+1 - 4]), strength);
-        data[i+2] = mix(copy[i+2], copy[i+2] + (copy[i+2] - copy[i+2 - 4]), strength);
-    }
-    return data;
-}
-
-function renderPreview() {
-    if (!previewImage) return;
-
-    const activeLUT = Object.keys(luts)[0]; // пока берем первый — позже сделаю свайп
-    const lut = luts[activeLUT];
-
-    ctx.drawImage(previewImage, 0, 0);
-    const imgData = ctx.getImageData(0, 0, previewCanvas.width, previewCanvas.height);
-    const data = imgData.data;
-
-    const strength = document.getElementById("lutStrength").value / 100;
-
-    for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i+1], b = data[i+2];
-        const idx = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
-        const lutPix = lut[idx];
-
-        data[i]   = mix(r, lutPix[0], strength);
-        data[i+1] = mix(g, lutPix[1], strength);
-        data[i+2] = mix(b, lutPix[2], strength);
-    }
-
-    const sharp = document.getElementById("sharpness").value;
-    applySharpen(data, previewCanvas.width, previewCanvas.height, sharp);
-
-    ctx.putImageData(imgData, 0, 0);
-}
-
-document.getElementById("lutStrength").addEventListener("input", renderPreview);
-document.getElementById("sharpness").addEventListener("input", () => {
-    document.getElementById("sharpVal").innerText = document.getElementById("sharpness").value + "%";
-    renderPreview();
+    reader.readAsDataURL(file);
 });
 
-document.getElementById("downloadFull").addEventListener("click", async () => {
-    const fullCanvas = resizeImage(originalImage, 4096);
-    const c = fullCanvas.getContext("2d");
+function generatePreviews(img) {
+    previewContainer.innerHTML = '';
+    previewImages = [];
 
-    c.drawImage(originalImage, 0, 0, fullCanvas.width, fullCanvas.height);
-    const imgData = c.getImageData(0, 0, fullCanvas.width, fullCanvas.height);
-    const data = imgData.data;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const scale = 200 / Math.max(img.width, img.height);
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    const lut = luts[Object.keys(luts)[0]];
-    const strength = document.getElementById("lutStrength").value / 100;
+    LUTS.forEach((lut, index) => {
+        const previewCanvas = document.createElement('canvas');
+        previewCanvas.width = canvas.width;
+        previewCanvas.height = canvas.height;
+        const previewCtx = previewCanvas.getContext('2d');
+        previewCtx.drawImage(canvas, 0, 0);
 
-    for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i+1], b = data[i+2];
-        const idx = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
-        const lutPix = lut[idx];
+        // ЗДЕСЬ placeholder: применяем LUT к previewCanvas
+        // Для настоящего проекта нужно подключить библиотеку обработки .CUBE
+        previewCtx.globalAlpha = lutSlider.value / 100; // сила LUT для превью
+        previewCtx.fillStyle = 'rgba(255,255,255,0)'; // placeholder
+        previewCtx.fillRect(0,0,previewCanvas.width, previewCanvas.height);
 
-        data[i]   = mix(r, lutPix[0], strength);
-        data[i+1] = mix(g, lutPix[1], strength);
-        data[i+2] = mix(b, lutPix[2], strength);
-    }
+        previewCanvas.dataset.index = index;
+        previewCanvas.addEventListener('click', () => {
+            selectedIndex = index;
+        });
 
-    const sharp = document.getElementById("sharpness").value;
-    applySharpen(data, fullCanvas.width, fullCanvas.height, sharp);
+        previewContainer.appendChild(previewCanvas);
+        previewImages.push(previewCanvas);
+    });
+}
 
-    c.putImageData(imgData, 0, 0);
+applyBtn.addEventListener('click', () => {
+    if (!originalImage) return;
 
-    const link = document.createElement("a");
-    link.download = "edited.jpg"; 
-    link.href = fullCanvas.toDataURL("image/jpeg", 1.0);
-    link.click();
+    modal.classList.remove('hidden');
+
+    saveBtn.onclick = () => {
+        applyLUTAndDownload();
+        modal.classList.add('hidden');
+    };
+
+    cancelBtn.onclick = () => {
+        modal.classList.add('hidden');
+    };
 });
+
+function applyLUTAndDownload() {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.min(originalImage.width, 4096);
+    canvas.height = Math.min(originalImage.height, 4096 * originalImage.height/originalImage.width);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+
+    // placeholder: применяем выбранный LUT
+    // placeholder: применяем резкость
+    ctx.globalAlpha = lutSlider.value / 100;
+
+    canvas.toBlob((blob) => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `processed_${LUTS[selectedIndex].name}.jpg`;
+        link.click();
+    }, 'image/jpeg', 1.0);
+}
